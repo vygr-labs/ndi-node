@@ -1,0 +1,39 @@
+{
+  "name": "ndi-node",
+  "version": "1.0.0",
+  "description": "Node.js bindings for NDI (Network Device Interface) SDK",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "install": "node-gyp rebuild",
+    "build": "node-gyp build",
+    "rebuild": "node-gyp rebuild",
+    "clean": "node-gyp clean",
+    "test": "node test/test.js"
+  },
+  "keywords": [
+    "ndi",
+    "newtek",
+    "video",
+    "streaming",
+    "broadcast",
+    "native",
+    "addon"
+  ],
+  "author": "",
+  "license": "GPL-3.0",
+  "gypfile": true,
+  "dependencies": {
+    "node-addon-api": "^7.0.0"
+  },
+  "devDependencies": {
+    "node-gyp": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  }
+}

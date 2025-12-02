@@ -1,0 +1,26 @@
+# Build output
+build/
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Compiled files
+*.node
+*.obj
+*.o
+
+# NDI SDK (users must provide their own)
+# Uncomment if you want to exclude SDK files from version control
+# deps/ndi/lib/
+# deps/ndi/include/*.h
+# !deps/ndi/include/.gitkeep
