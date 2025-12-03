@@ -1,0 +1,1 @@
+- test performance & smoothness of rendered frames on async vs sync implementations (checkout most recent sync commit)
