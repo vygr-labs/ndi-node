@@ -17,21 +17,13 @@
  */
 
 /**
- * NDI Sender Example
+ * NDI Sender Example (Async)
  * 
- * This example demonstrates how to send video frames over NDI.
- * It generates a simple test pattern and broadcasts it as an NDI source.
+ * This example demonstrates how to send video frames over NDI
+ * using async/await for non-blocking operation.
  */
 
 const ndi = require('../lib');
-
-// Initialize NDI
-if (!ndi.initialize()) {
-    console.error('Failed to initialize NDI');
-    process.exit(1);
-}
-
-console.log('NDI Version:', ndi.version());
 
 // Video settings
 const WIDTH = 1920;
@@ -39,15 +31,8 @@ const HEIGHT = 1080;
 const FRAME_RATE_N = 30000;
 const FRAME_RATE_D = 1001;
 
-// Create sender
-const sender = new ndi.Sender({
-    name: 'NDI Test Source',
-    clockVideo: true,
-    clockAudio: false
-});
-
-console.log('Source name:', sender.getSourceName());
-console.log('Broadcasting NDI source...');
+let sender = null;
+let running = true;
 
 // Generate a test pattern frame (BGRA format)
 function generateFrame(frameNumber) {
@@ -81,50 +66,80 @@ function generateFrame(frameNumber) {
     return data;
 }
 
-// Frame counter
-let frameNumber = 0;
+// Sleep utility
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-// Send frames at the specified frame rate
-const frameInterval = (FRAME_RATE_D / FRAME_RATE_N) * 1000;
-
-const sendFrame = () => {
-    const frame = {
-        xres: WIDTH,
-        yres: HEIGHT,
-        fourCC: ndi.FourCC.BGRA,
-        frameRateN: FRAME_RATE_N,
-        frameRateD: FRAME_RATE_D,
-        frameFormatType: ndi.FrameFormat.PROGRESSIVE,
-        data: generateFrame(frameNumber)
-    };
-    
-    sender.sendVideo(frame);
-    frameNumber++;
-    
-    // Log every 30 frames (approximately 1 second)
-    if (frameNumber % 30 === 0) {
-        const connections = sender.getConnections();
-        console.log(`Frame ${frameNumber}, Connections: ${connections}`);
+async function main() {
+    // Initialize NDI
+    if (!ndi.initialize()) {
+        console.error('Failed to initialize NDI');
+        process.exit(1);
     }
-};
 
-// Start sending frames
-const intervalId = setInterval(sendFrame, frameInterval);
+    console.log('NDI Version:', ndi.version());
 
-// Monitor tally state
-sender.on('tally', (tally) => {
-    console.log('Tally changed:', tally);
-});
+    // Create sender
+    sender = new ndi.Sender({
+        name: 'NDI Test Source',
+        clockVideo: true,
+        clockAudio: false
+    });
 
-sender.startTallyPolling(100);
+    console.log('Source name:', sender.getSourceName());
+    console.log('Broadcasting NDI source...');
+    console.log('Press Ctrl+C to exit\n');
+
+    // Frame counter
+    let frameNumber = 0;
+    const frameInterval = (FRAME_RATE_D / FRAME_RATE_N) * 1000;
+
+    // Main async loop
+    while (running) {
+        const frame = {
+            xres: WIDTH,
+            yres: HEIGHT,
+            fourCC: ndi.FourCC.BGRA,
+            frameRateN: FRAME_RATE_N,
+            frameRateD: FRAME_RATE_D,
+            frameFormatType: ndi.FrameFormat.PROGRESSIVE,
+            data: generateFrame(frameNumber)
+        };
+        
+        // Use async send - runs on background thread
+        await sender.sendVideoPromise(frame);
+        frameNumber++;
+        
+        // Log and check tally/connections every second (approximately 30 frames)
+        if (frameNumber % 30 === 0) {
+            // Use async methods for tally and connections
+            const [tally, connections] = await Promise.all([
+                sender.getTallyAsync(0),
+                sender.getConnectionsAsync(0)
+            ]);
+            
+            console.log(`Frame ${frameNumber}, Connections: ${connections}, Tally: ${JSON.stringify(tally)}`);
+        }
+        
+        // Sleep to maintain frame rate
+        await sleep(frameInterval);
+    }
+}
 
 // Cleanup on exit
 process.on('SIGINT', () => {
     console.log('\nShutting down...');
-    clearInterval(intervalId);
-    sender.destroy();
+    running = false;
+    if (sender) sender.destroy();
     ndi.destroy();
     process.exit(0);
 });
 
-console.log('Press Ctrl+C to exit\n');
+// Run the async main function
+main().catch(err => {
+    console.error('Fatal error:', err);
+    if (sender) sender.destroy();
+    ndi.destroy();
+    process.exit(1);
+});

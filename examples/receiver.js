@@ -17,29 +17,43 @@
  */
 
 /**
- * NDI Receiver Example
+ * NDI Receiver Example (Async)
  * 
- * This example demonstrates how to receive video from an NDI source.
- * It finds available sources and connects to the first one.
+ * This example demonstrates how to receive video from an NDI source
+ * using async/await for non-blocking operation.
  */
 
 const ndi = require('../lib');
 
-// Initialize NDI
-if (!ndi.initialize()) {
-    console.error('Failed to initialize NDI');
-    process.exit(1);
-}
+let finder = null;
+let receiver = null;
+let running = true;
 
-console.log('NDI Version:', ndi.version());
-console.log('Searching for NDI sources...');
+async function main() {
+    // Initialize NDI
+    if (!ndi.initialize()) {
+        console.error('Failed to initialize NDI');
+        process.exit(1);
+    }
 
-// Find sources first
-const finder = new ndi.Finder();
+    console.log('NDI Version:', ndi.version());
+    console.log('Searching for NDI sources...');
 
-// Wait for sources to appear
-setTimeout(() => {
-    const sources = finder.getSources();
+    // Find sources first
+    finder = new ndi.Finder();
+
+    // Wait for sources using async method
+    console.log('Waiting for sources to appear...');
+    let sources = [];
+    
+    // Try to find sources for up to 5 seconds
+    for (let i = 0; i < 5 && sources.length === 0; i++) {
+        const result = await finder.waitForSourcesAsync(1000);
+        sources = result.sources;
+        if (sources.length === 0) {
+            console.log(`  Searching... (${i + 1}/5)`);
+        }
+    }
     
     if (sources.length === 0) {
         console.log('No NDI sources found. Make sure an NDI source is running.');
@@ -48,9 +62,9 @@ setTimeout(() => {
         process.exit(1);
     }
     
-    console.log(`Found ${sources.length} source(s):`);
+    console.log(`\nFound ${sources.length} source(s):`);
     sources.forEach((source, index) => {
-        console.log(`${index + 1}. ${source.name}`);
+        console.log(`  ${index + 1}. ${source.name}`);
     });
     
     // Connect to the first source
@@ -58,7 +72,7 @@ setTimeout(() => {
     console.log(`\nConnecting to: ${selectedSource.name}`);
     
     // Create receiver
-    const receiver = new ndi.Receiver({
+    receiver = new ndi.Receiver({
         source: selectedSource,
         colorFormat: ndi.ColorFormat.BGRX_BGRA,
         bandwidth: ndi.Bandwidth.HIGHEST,
@@ -69,58 +83,77 @@ setTimeout(() => {
     // Set tally to indicate we're receiving
     receiver.setTally({ onProgram: true, onPreview: false });
     
+    console.log('Receiving... Press Ctrl+C to exit\n');
+    
     // Frame counters
     let videoFrames = 0;
     let audioFrames = 0;
     let lastReport = Date.now();
     
-    // Handle video frames
-    receiver.on('video', (frame) => {
-        videoFrames++;
-        
-        // Report stats every second
-        const now = Date.now();
-        if (now - lastReport >= 1000) {
-            console.log(`Video: ${videoFrames} fps, Audio: ${audioFrames} fps, ` +
-                        `Resolution: ${frame.xres}x${frame.yres}, Format: ${frame.fourCC}`);
-            videoFrames = 0;
-            audioFrames = 0;
-            lastReport = now;
+    // Main async capture loop
+    while (running) {
+        try {
+            // Capture frame asynchronously (non-blocking)
+            const result = await receiver.captureAsync(100);
+            
+            switch (result.type) {
+                case 'video':
+                    videoFrames++;
+                    break;
+                    
+                case 'audio':
+                    audioFrames++;
+                    break;
+                    
+                case 'metadata':
+                    if (result.metadata) {
+                        console.log('Metadata received:', result.metadata.data);
+                    }
+                    break;
+                    
+                case 'status_change':
+                    console.log('Connection status changed');
+                    break;
+                    
+                case 'error':
+                    console.error('Receive error:', result.error);
+                    break;
+            }
+            
+            // Report stats every second
+            const now = Date.now();
+            if (now - lastReport >= 1000) {
+                if (videoFrames > 0 || audioFrames > 0) {
+                    const videoInfo = result.video 
+                        ? `Resolution: ${result.video.xres}x${result.video.yres}, Format: ${result.video.fourCC}`
+                        : '';
+                    console.log(`Video: ${videoFrames} fps, Audio: ${audioFrames} fps ${videoInfo}`);
+                }
+                videoFrames = 0;
+                audioFrames = 0;
+                lastReport = now;
+            }
+        } catch (err) {
+            console.error('Capture error:', err.message);
         }
-    });
-    
-    // Handle audio frames
-    receiver.on('audio', (frame) => {
-        audioFrames++;
-    });
-    
-    // Handle metadata
-    receiver.on('metadata', (frame) => {
-        console.log('Metadata received:', frame.data);
-    });
-    
-    // Handle status changes
-    receiver.on('status_change', () => {
-        console.log('Connection status changed');
-    });
-    
-    // Handle errors
-    receiver.on('error', (error) => {
-        console.error('Receive error:', error);
-    });
-    
-    // Start capturing
-    receiver.startCapture(100);
-    
-    console.log('Receiving... Press Ctrl+C to exit\n');
-    
-    // Cleanup on exit
-    process.on('SIGINT', () => {
-        console.log('\nShutting down...');
-        receiver.destroy();
-        finder.destroy();
-        ndi.destroy();
-        process.exit(0);
-    });
-    
-}, 3000);
+    }
+}
+
+// Cleanup on exit
+process.on('SIGINT', () => {
+    console.log('\nShutting down...');
+    running = false;
+    if (receiver) receiver.destroy();
+    if (finder) finder.destroy();
+    ndi.destroy();
+    process.exit(0);
+});
+
+// Run the async main function
+main().catch(err => {
+    console.error('Fatal error:', err);
+    if (receiver) receiver.destroy();
+    if (finder) finder.destroy();
+    ndi.destroy();
+    process.exit(1);
+});

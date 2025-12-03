@@ -17,55 +17,89 @@
  */
 
 /**
- * NDI Finder Example
+ * NDI Finder Example (Async)
  * 
- * This example demonstrates how to discover NDI sources on the network.
+ * This example demonstrates how to discover NDI sources on the network
+ * using async/await for non-blocking operation.
  */
 
 const ndi = require('../lib');
 
-// Initialize NDI
-if (!ndi.initialize()) {
-    console.error('Failed to initialize NDI');
-    process.exit(1);
-}
+let finder = null;
+let running = true;
 
-console.log('NDI Version:', ndi.version());
-console.log('Searching for NDI sources...\n');
+async function main() {
+    // Initialize NDI
+    if (!ndi.initialize()) {
+        console.error('Failed to initialize NDI');
+        process.exit(1);
+    }
 
-// Create a finder
-const finder = new ndi.Finder({
-    showLocalSources: true
-});
+    console.log('NDI Version:', ndi.version());
+    console.log('Searching for NDI sources...\n');
 
-// Poll for sources every second
-finder.on('sources', (sources) => {
-    console.log('\n--- Sources Updated ---');
-    sources.forEach((source, index) => {
-        console.log(`${index + 1}. ${source.name}`);
+    // Create a finder
+    finder = new ndi.Finder({
+        showLocalSources: true
+    });
+
+    // Initial search with async method
+    console.log('Performing initial source discovery...');
+    const initialSources = await finder.getSourcesAsync();
+    console.log(`Found ${initialSources.length} NDI source(s):`);
+    initialSources.forEach((source, index) => {
+        console.log(`  ${index + 1}. ${source.name}`);
         if (source.urlAddress) {
-            console.log(`   URL: ${source.urlAddress}`);
+            console.log(`     URL: ${source.urlAddress}`);
         }
     });
-});
 
-finder.startPolling(1000);
+    console.log('\nContinuously monitoring for source changes...');
+    console.log('Press Ctrl+C to exit\n');
 
-// Initial search
-setTimeout(() => {
-    const sources = finder.getSources();
-    console.log(`Found ${sources.length} NDI source(s):`);
-    sources.forEach((source, index) => {
-        console.log(`${index + 1}. ${source.name}`);
-    });
-}, 2000);
+    // Continuous async polling loop
+    let lastSourcesJson = JSON.stringify(initialSources);
+    
+    while (running) {
+        try {
+            // Wait for sources to change (async, non-blocking)
+            const result = await finder.waitForSourcesAsync(1000);
+            
+            if (result.changed) {
+                const sources = result.sources;
+                const sourcesJson = JSON.stringify(sources);
+                
+                if (sourcesJson !== lastSourcesJson) {
+                    lastSourcesJson = sourcesJson;
+                    console.log('\n--- Sources Updated ---');
+                    console.log(`Found ${sources.length} source(s):`);
+                    sources.forEach((source, index) => {
+                        console.log(`  ${index + 1}. ${source.name}`);
+                        if (source.urlAddress) {
+                            console.log(`     URL: ${source.urlAddress}`);
+                        }
+                    });
+                }
+            }
+        } catch (err) {
+            console.error('Error during source discovery:', err.message);
+        }
+    }
+}
 
 // Cleanup on exit
 process.on('SIGINT', () => {
     console.log('\nShutting down...');
-    finder.destroy();
+    running = false;
+    if (finder) finder.destroy();
     ndi.destroy();
     process.exit(0);
 });
 
-console.log('Press Ctrl+C to exit\n');
+// Run the async main function
+main().catch(err => {
+    console.error('Fatal error:', err);
+    if (finder) finder.destroy();
+    ndi.destroy();
+    process.exit(1);
+});
