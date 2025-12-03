@@ -36,6 +36,7 @@
     "src/",
     "scripts/",
     "deps/ndi/include/",
+    "deps/ndi/lib/",
     "binding.gyp",
     "README.md",
     "LICENSE"
