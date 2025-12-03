@@ -43,17 +43,29 @@ deps/ndi/
 ## Installation
 
 ```bash
-npm install
+npm install @vygr-labs/ndi-node
 ```
 
-This will compile the native addon using node-gyp.
+Or with yarn:
+
+```bash
+yarn add @vygr-labs/ndi-node
+```
+
+Or with pnpm:
+
+```bash
+pnpm add @vygr-labs/ndi-node
+```
+
+This will compile the native addon using node-gyp. After installation, a post-install script will check for the NDI SDK and provide setup instructions if needed.
 
 ## Quick Start
 
 ### Finding NDI Sources
 
 ```javascript
-const ndi = require('ndi-node');
+const ndi = require('@vygr-labs/ndi-node');
 
 // Initialize NDI
 ndi.initialize();
@@ -77,7 +89,7 @@ ndi.destroy();
 ### Sending Video
 
 ```javascript
-const ndi = require('ndi-node');
+const ndi = require('@vygr-labs/ndi-node');
 
 ndi.initialize();
 
@@ -111,7 +123,7 @@ ndi.destroy();
 ### Receiving Video
 
 ```javascript
-const ndi = require('ndi-node');
+const ndi = require('@vygr-labs/ndi-node');
 
 ndi.initialize();
 
