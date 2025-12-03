@@ -12,6 +12,7 @@ NDI is a royalty-free software specification developed by NewTek that enables vi
 - **PTZ Control** - Control PTZ cameras over NDI
 - **Tally Support** - Send and receive tally information
 - **Metadata** - Exchange XML metadata with NDI sources
+- **Async/Await Support** - Non-blocking async methods for all operations
 - **TypeScript Support** - Full TypeScript type definitions included
 
 ## Prerequisites
@@ -67,23 +68,28 @@ This will compile the native addon using node-gyp. After installation, a post-in
 ```javascript
 const ndi = require('@vygr-labs/ndi-node');
 
-// Initialize NDI
-ndi.initialize();
+async function main() {
+    // Initialize NDI
+    ndi.initialize();
 
-// Find sources (async convenience function)
-const sources = await ndi.find(5000);
-console.log('Found sources:', sources);
+    // Create a finder
+    const finder = new ndi.Finder({ showLocalSources: true });
 
-// Or use the Finder class for continuous discovery
-const finder = new ndi.Finder();
-finder.on('sources', (sources) => {
-    console.log('Sources updated:', sources);
-});
-finder.startPolling(1000);
+    // Find sources asynchronously (non-blocking)
+    const sources = await finder.getSourcesAsync();
+    console.log('Found sources:', sources);
 
-// Cleanup
-finder.destroy();
-ndi.destroy();
+    // Or wait for sources to appear
+    const result = await finder.waitForSourcesAsync(5000);
+    console.log('Sources changed:', result.changed);
+    console.log('Sources:', result.sources);
+
+    // Cleanup
+    finder.destroy();
+    ndi.destroy();
+}
+
+main();
 ```
 
 ### Sending Video
@@ -91,33 +97,38 @@ ndi.destroy();
 ```javascript
 const ndi = require('@vygr-labs/ndi-node');
 
-ndi.initialize();
+async function main() {
+    ndi.initialize();
 
-const sender = new ndi.Sender({
-    name: 'My NDI Source',
-    clockVideo: true
-});
+    const sender = new ndi.Sender({
+        name: 'My NDI Source',
+        clockVideo: true
+    });
 
-// Send a frame
-sender.sendVideo({
-    xres: 1920,
-    yres: 1080,
-    fourCC: ndi.FourCC.BGRA,
-    frameRateN: 30000,
-    frameRateD: 1001,
-    data: frameBuffer // Buffer containing BGRA pixel data
-});
+    // Send a frame asynchronously (non-blocking, runs on background thread)
+    await sender.sendVideoPromise({
+        xres: 1920,
+        yres: 1080,
+        fourCC: ndi.FourCC.BGRA,
+        frameRateN: 30000,
+        frameRateD: 1001,
+        data: frameBuffer // Buffer containing BGRA pixel data
+    });
 
-// Monitor tally
-sender.on('tally', (tally) => {
-    console.log('On Program:', tally.onProgram);
-    console.log('On Preview:', tally.onPreview);
-});
-sender.startTallyPolling();
+    // Check tally and connections asynchronously
+    const [tally, connections] = await Promise.all([
+        sender.getTallyAsync(),
+        sender.getConnectionsAsync()
+    ]);
+    console.log('Tally:', tally);
+    console.log('Connections:', connections);
 
-// Cleanup
-sender.destroy();
-ndi.destroy();
+    // Cleanup
+    sender.destroy();
+    ndi.destroy();
+}
+
+main();
 ```
 
 ### Receiving Video
@@ -125,29 +136,44 @@ ndi.destroy();
 ```javascript
 const ndi = require('@vygr-labs/ndi-node');
 
-ndi.initialize();
+async function main() {
+    ndi.initialize();
 
-const receiver = new ndi.Receiver({
-    source: { name: 'SOURCE_NAME (COMPUTER)' },
-    colorFormat: ndi.ColorFormat.BGRX_BGRA,
-    bandwidth: ndi.Bandwidth.HIGHEST
-});
+    // Find sources first
+    const finder = new ndi.Finder();
+    const result = await finder.waitForSourcesAsync(5000);
+    
+    if (result.sources.length === 0) {
+        console.log('No sources found');
+        return;
+    }
 
-// Event-based capture
-receiver.on('video', (frame) => {
-    console.log(`Video: ${frame.xres}x${frame.yres}`);
-    // frame.data contains the pixel buffer
-});
+    // Create receiver and connect to first source
+    const receiver = new ndi.Receiver({
+        source: result.sources[0],
+        colorFormat: ndi.ColorFormat.BGRX_BGRA,
+        bandwidth: ndi.Bandwidth.HIGHEST
+    });
 
-receiver.on('audio', (frame) => {
-    console.log(`Audio: ${frame.noSamples} samples`);
-});
+    // Capture frames asynchronously (non-blocking)
+    while (true) {
+        const frame = await receiver.captureAsync(1000);
+        
+        if (frame.type === 'video') {
+            console.log(`Video: ${frame.video.xres}x${frame.video.yres}`);
+            // frame.video.data contains the pixel buffer
+        } else if (frame.type === 'audio') {
+            console.log(`Audio: ${frame.audio.noSamples} samples`);
+        }
+    }
 
-receiver.startCapture();
+    // Cleanup
+    receiver.destroy();
+    finder.destroy();
+    ndi.destroy();
+}
 
-// Cleanup
-receiver.destroy();
-ndi.destroy();
+main();
 ```
 
 ## API Reference
@@ -178,14 +204,16 @@ Options:
 - `extraIps: string` - Extra IPs to search for sources
 
 Methods:
-- `getSources(): Source[]` - Get currently discovered sources
-- `waitForSources(timeout?): boolean` - Wait for sources to change
+- `getSources(): Source[]` - Get currently discovered sources (sync)
+- `getSourcesAsync(): Promise<Source[]>` - Get sources asynchronously (non-blocking)
+- `waitForSources(timeout?): boolean` - Wait for sources to change (sync)
+- `waitForSourcesAsync(timeout?): Promise<{changed, sources}>` - Wait for sources asynchronously (non-blocking)
 - `startPolling(interval?)` - Start polling for sources
 - `stopPolling()` - Stop polling
 - `destroy()` - Release resources
 
 Events:
-- `'sources'` - Emitted when sources change
+- `'sources'` - Emitted when sources change (when using polling)
 
 ### Sender Class
 
@@ -200,20 +228,24 @@ Options:
 - `clockAudio: boolean` - Clock audio to sample rate (default: true)
 
 Methods:
-- `sendVideo(frame)` - Send a video frame
-- `sendVideoAsync(frame)` - Send a video frame asynchronously
-- `sendAudio(frame)` - Send an audio frame
+- `sendVideo(frame)` - Send a video frame (sync)
+- `sendVideoAsync(frame)` - Send a video frame using NDI async API
+- `sendVideoPromise(frame): Promise<void>` - Send a video frame on background thread (non-blocking)
+- `sendAudio(frame)` - Send an audio frame (sync)
+- `sendAudioPromise(frame): Promise<void>` - Send an audio frame on background thread (non-blocking)
 - `sendMetadata(frame)` - Send metadata
-- `getTally(timeout?): Tally | null` - Get tally state
+- `getTally(timeout?): Tally | null` - Get tally state (sync)
+- `getTallyAsync(timeout?): Promise<Tally | null>` - Get tally state asynchronously (non-blocking)
 - `setTally(tally)` - Set tally state
-- `getConnections(timeout?): number` - Get number of connections
+- `getConnections(timeout?): number` - Get number of connections (sync)
+- `getConnectionsAsync(timeout?): Promise<number>` - Get connections asynchronously (non-blocking)
 - `getSourceName(): string | null` - Get full source name
 - `startTallyPolling(interval?)` - Start polling for tally changes
 - `stopTallyPolling()` - Stop tally polling
 - `destroy()` - Release resources
 
 Events:
-- `'tally'` - Emitted when tally state changes
+- `'tally'` - Emitted when tally state changes (when using polling)
 
 ### Receiver Class
 
@@ -230,13 +262,14 @@ Options:
 
 Methods:
 - `connect(source)` - Connect to a source
-- `capture(timeout?): CaptureResult` - Capture any frame type
-- `captureVideo(timeout?): VideoFrame | null` - Capture video only
-- `captureAudio(timeout?): AudioFrame | null` - Capture audio only
+- `capture(timeout?): CaptureResult` - Capture any frame type (sync)
+- `captureAsync(timeout?): Promise<CaptureResult>` - Capture any frame type asynchronously (non-blocking)
+- `captureVideo(timeout?): VideoFrame | null` - Capture video only (sync)
+- `captureVideoAsync(timeout?): Promise<VideoFrame | null>` - Capture video asynchronously (non-blocking)
+- `captureAudio(timeout?): AudioFrame | null` - Capture audio only (sync)
+- `captureAudioAsync(timeout?): Promise<AudioFrame | null>` - Capture audio asynchronously (non-blocking)
 - `setTally(tally): boolean` - Set tally information
 - `sendMetadata(frame)` - Send metadata to source
-- `startCapture(timeout?)` - Start continuous capture
-- `stopCapture()` - Stop continuous capture
 - `destroy()` - Release resources
 
 PTZ Methods:
@@ -299,13 +332,11 @@ ndi.FrameType.STATUS_CHANGE
 
 ## Examples
 
-See the `examples/` directory for complete examples:
+See the `examples/` directory for complete examples using async/await:
 
-- `finder.js` - Discover NDI sources
-- `sender.js` - Send video test pattern
-- `audio-sender.js` - Send audio (sine wave)
-- `receiver.js` - Receive video/audio
-- `ptz-control.js` - Control PTZ cameras
+- `finder.js` - Discover NDI sources asynchronously
+- `sender.js` - Send video test pattern with async frame sending
+- `receiver.js` - Receive video/audio with async capture loop
 
 ## License
 
