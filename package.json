@@ -26,9 +26,9 @@
   ],
   "author": "Eyetu Kingsley Oghenekome <eyetukingsley330@gmail.com>",
   "license": "GPL-3.0",
-  "homepage": "https://github.com/CodeKing12/ndi-node#readme",
+  "homepage": "https://github.com/vygr-labs/ndi-node#readme",
   "bugs": {
-    "url": "https://github.com/yourusername/ndi-node/issues"
+    "url": "https://github.com/vygr-labs/ndi-node/issues"
   },
   "gypfile": true,
   "files": [
