@@ -1,5 +1,5 @@
 {
-  "name": "ndi-node",
+  "name": "@vygr-labs/ndi-node",
   "version": "1.0.0",
   "description": "Node.js bindings for NDI (Network Device Interface) SDK",
   "main": "lib/index.js",
