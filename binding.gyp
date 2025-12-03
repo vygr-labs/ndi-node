@@ -6,6 +6,7 @@
       "cflags_cc!": ["-fno-exceptions"],
       "sources": [
         "src/ndi_addon.cpp",
+        "src/ndi_async.cpp",
         "src/ndi_finder.cpp",
         "src/ndi_sender.cpp",
         "src/ndi_receiver.cpp",

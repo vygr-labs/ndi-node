@@ -31,15 +31,23 @@ public:
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
     NdiFinder(const Napi::CallbackInfo& info);
     ~NdiFinder();
+    
+    // Allow async workers to access the finder instance
+    NDIlib_find_instance_t GetFinder() const { return m_finder; }
+    bool IsDestroyed() const { return m_destroyed; }
 
 private:
     static Napi::FunctionReference constructor;
     
-    // Instance methods
+    // Synchronous instance methods
     Napi::Value GetSources(const Napi::CallbackInfo& info);
     Napi::Value WaitForSources(const Napi::CallbackInfo& info);
     Napi::Value Destroy(const Napi::CallbackInfo& info);
     Napi::Value IsValid(const Napi::CallbackInfo& info);
+    
+    // Async instance methods
+    Napi::Value GetSourcesAsync(const Napi::CallbackInfo& info);
+    Napi::Value WaitForSourcesAsync(const Napi::CallbackInfo& info);
     
     // Internal state
     NDIlib_find_instance_t m_finder;

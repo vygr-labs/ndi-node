@@ -198,6 +198,19 @@ export declare class Finder extends EventEmitter {
     waitForSources(timeout?: number): boolean;
 
     /**
+     * Get currently discovered sources (async, non-blocking)
+     * @returns Promise resolving to array of source objects
+     */
+    getSourcesAsync(): Promise<NdiSource[]>;
+
+    /**
+     * Wait for sources to change (async, non-blocking)
+     * @param timeout Timeout in milliseconds (default: 1000)
+     * @returns Promise resolving to object with changed flag and sources
+     */
+    waitForSourcesAsync(timeout?: number): Promise<{ changed: boolean; sources: NdiSource[] }>;
+
+    /**
      * Start polling for sources. Emits 'sources' event when sources change.
      * @param interval Poll interval in milliseconds (default: 1000)
      */
@@ -250,14 +263,26 @@ export declare class Sender extends EventEmitter {
     sendVideo(frame: VideoFrame): void;
 
     /**
-     * Send a video frame asynchronously (non-blocking)
+     * Send a video frame asynchronously (non-blocking, uses NDI async API)
      */
     sendVideoAsync(frame: VideoFrame): void;
+
+    /**
+     * Send a video frame (Promise-based async, runs on background thread)
+     * @returns Promise that resolves when the frame is sent
+     */
+    sendVideoPromise(frame: VideoFrame): Promise<void>;
 
     /**
      * Send an audio frame
      */
     sendAudio(frame: AudioFrame): void;
+
+    /**
+     * Send an audio frame (Promise-based async, runs on background thread)
+     * @returns Promise that resolves when the frame is sent
+     */
+    sendAudioPromise(frame: AudioFrame): Promise<void>;
 
     /**
      * Send metadata
@@ -271,6 +296,13 @@ export declare class Sender extends EventEmitter {
     getTally(timeout?: number): Tally | null;
 
     /**
+     * Get the current tally state (async, non-blocking)
+     * @param timeout Timeout in milliseconds
+     * @returns Promise resolving to tally state or null
+     */
+    getTallyAsync(timeout?: number): Promise<Tally | null>;
+
+    /**
      * Set the tally state
      */
     setTally(tally: Tally): void;
@@ -280,6 +312,13 @@ export declare class Sender extends EventEmitter {
      * @param timeout Timeout in milliseconds
      */
     getConnections(timeout?: number): number;
+
+    /**
+     * Get the number of current connections (async, non-blocking)
+     * @param timeout Timeout in milliseconds
+     * @returns Promise resolving to connection count
+     */
+    getConnectionsAsync(timeout?: number): Promise<number>;
 
     /**
      * Get the full source name (includes computer name)
@@ -371,6 +410,27 @@ export declare class Receiver extends EventEmitter {
      * @param timeout Timeout in milliseconds (default: 1000)
      */
     captureAudio(timeout?: number): AudioFrame | null;
+
+    /**
+     * Capture a frame asynchronously (video, audio, or metadata) - non-blocking
+     * @param timeout Timeout in milliseconds (default: 1000)
+     * @returns Promise resolving to capture result
+     */
+    captureAsync(timeout?: number): Promise<CaptureResult>;
+
+    /**
+     * Capture only video frames asynchronously - non-blocking
+     * @param timeout Timeout in milliseconds (default: 1000)
+     * @returns Promise resolving to video frame or null
+     */
+    captureVideoAsync(timeout?: number): Promise<VideoFrame | null>;
+
+    /**
+     * Capture only audio frames asynchronously - non-blocking
+     * @param timeout Timeout in milliseconds (default: 1000)
+     * @returns Promise resolving to audio frame or null
+     */
+    captureAudioAsync(timeout?: number): Promise<AudioFrame | null>;
 
     /**
      * Set tally information
@@ -480,8 +540,9 @@ export declare class Receiver extends EventEmitter {
     /**
      * Start continuous capture. Emits 'video', 'audio', and 'metadata' events.
      * @param timeout Capture timeout per frame (default: 100)
+     * @param useAsync Use async capture for non-blocking operation (default: true)
      */
-    startCapture(timeout?: number): void;
+    startCapture(timeout?: number, useAsync?: boolean): void;
 
     /**
      * Stop continuous capture

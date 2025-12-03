@@ -22,6 +22,7 @@
 
 #include "ndi_receiver.h"
 #include "ndi_utils.h"
+#include "ndi_async.h"
 #include <cstring>
 
 Napi::FunctionReference NdiReceiver::constructor;
@@ -34,6 +35,9 @@ Napi::Object NdiReceiver::Init(Napi::Env env, Napi::Object exports) {
         InstanceMethod("capture", &NdiReceiver::Capture),
         InstanceMethod("captureVideo", &NdiReceiver::CaptureVideo),
         InstanceMethod("captureAudio", &NdiReceiver::CaptureAudio),
+        InstanceMethod("captureAsync", &NdiReceiver::CaptureAsync),
+        InstanceMethod("captureVideoAsync", &NdiReceiver::CaptureVideoAsync),
+        InstanceMethod("captureAudioAsync", &NdiReceiver::CaptureAudioAsync),
         InstanceMethod("setTally", &NdiReceiver::SetTally),
         InstanceMethod("sendMetadata", &NdiReceiver::SendMetadata),
         InstanceMethod("ptzIsSupported", &NdiReceiver::PtzIsSupported),
@@ -599,4 +603,64 @@ Napi::Value NdiReceiver::Destroy(const Napi::CallbackInfo& info) {
 Napi::Value NdiReceiver::IsValid(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     return Napi::Boolean::New(env, m_receiver != nullptr && !m_destroyed);
+}
+
+Napi::Value NdiReceiver::CaptureAsync(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    if (!m_receiver || m_destroyed) {
+        Napi::Error::New(env, "Receiver has been destroyed").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    
+    uint32_t timeout = 1000;
+    if (info.Length() > 0 && info[0].IsNumber()) {
+        timeout = info[0].As<Napi::Number>().Uint32Value();
+    }
+    
+    CaptureWorker* worker = new CaptureWorker(env, m_receiver, timeout);
+    Napi::Promise promise = worker->m_deferred.Promise();
+    worker->Queue();
+    
+    return promise;
+}
+
+Napi::Value NdiReceiver::CaptureVideoAsync(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    if (!m_receiver || m_destroyed) {
+        Napi::Error::New(env, "Receiver has been destroyed").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    
+    uint32_t timeout = 1000;
+    if (info.Length() > 0 && info[0].IsNumber()) {
+        timeout = info[0].As<Napi::Number>().Uint32Value();
+    }
+    
+    CaptureVideoWorker* worker = new CaptureVideoWorker(env, m_receiver, timeout);
+    Napi::Promise promise = worker->m_deferred.Promise();
+    worker->Queue();
+    
+    return promise;
+}
+
+Napi::Value NdiReceiver::CaptureAudioAsync(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    if (!m_receiver || m_destroyed) {
+        Napi::Error::New(env, "Receiver has been destroyed").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    
+    uint32_t timeout = 1000;
+    if (info.Length() > 0 && info[0].IsNumber()) {
+        timeout = info[0].As<Napi::Number>().Uint32Value();
+    }
+    
+    CaptureAudioWorker* worker = new CaptureAudioWorker(env, m_receiver, timeout);
+    Napi::Promise promise = worker->m_deferred.Promise();
+    worker->Queue();
+    
+    return promise;
 }

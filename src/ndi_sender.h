@@ -31,11 +31,15 @@ public:
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
     NdiSender(const Napi::CallbackInfo& info);
     ~NdiSender();
+    
+    // Allow async workers to access the sender instance
+    NDIlib_send_instance_t GetSender() const { return m_sender; }
+    bool IsDestroyed() const { return m_destroyed; }
 
 private:
     static Napi::FunctionReference constructor;
     
-    // Instance methods
+    // Synchronous instance methods
     Napi::Value SendVideo(const Napi::CallbackInfo& info);
     Napi::Value SendVideoAsync(const Napi::CallbackInfo& info);
     Napi::Value SendAudio(const Napi::CallbackInfo& info);
@@ -48,6 +52,12 @@ private:
     Napi::Value AddConnectionMetadata(const Napi::CallbackInfo& info);
     Napi::Value Destroy(const Napi::CallbackInfo& info);
     Napi::Value IsValid(const Napi::CallbackInfo& info);
+    
+    // Promise-based async instance methods
+    Napi::Value SendVideoPromise(const Napi::CallbackInfo& info);
+    Napi::Value SendAudioPromise(const Napi::CallbackInfo& info);
+    Napi::Value GetTallyAsync(const Napi::CallbackInfo& info);
+    Napi::Value GetConnectionsAsync(const Napi::CallbackInfo& info);
     
     // Internal state
     NDIlib_send_instance_t m_sender;

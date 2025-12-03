@@ -22,6 +22,7 @@
 
 #include "ndi_finder.h"
 #include "ndi_utils.h"
+#include "ndi_async.h"
 
 Napi::FunctionReference NdiFinder::constructor;
 
@@ -31,6 +32,8 @@ Napi::Object NdiFinder::Init(Napi::Env env, Napi::Object exports) {
     Napi::Function func = DefineClass(env, "NdiFinder", {
         InstanceMethod("getSources", &NdiFinder::GetSources),
         InstanceMethod("waitForSources", &NdiFinder::WaitForSources),
+        InstanceMethod("getSourcesAsync", &NdiFinder::GetSourcesAsync),
+        InstanceMethod("waitForSourcesAsync", &NdiFinder::WaitForSourcesAsync),
         InstanceMethod("destroy", &NdiFinder::Destroy),
         InstanceMethod("isValid", &NdiFinder::IsValid)
     });
@@ -148,4 +151,39 @@ Napi::Value NdiFinder::Destroy(const Napi::CallbackInfo& info) {
 Napi::Value NdiFinder::IsValid(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     return Napi::Boolean::New(env, m_finder != nullptr && !m_destroyed);
+}
+
+Napi::Value NdiFinder::GetSourcesAsync(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    if (!m_finder || m_destroyed) {
+        Napi::Error::New(env, "Finder has been destroyed").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    
+    GetSourcesWorker* worker = new GetSourcesWorker(env, m_finder);
+    Napi::Promise promise = worker->m_deferred.Promise();
+    worker->Queue();
+    
+    return promise;
+}
+
+Napi::Value NdiFinder::WaitForSourcesAsync(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    if (!m_finder || m_destroyed) {
+        Napi::Error::New(env, "Finder has been destroyed").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    
+    uint32_t timeout = 1000;
+    if (info.Length() > 0 && info[0].IsNumber()) {
+        timeout = info[0].As<Napi::Number>().Uint32Value();
+    }
+    
+    WaitForSourcesWorker* worker = new WaitForSourcesWorker(env, m_finder, timeout);
+    Napi::Promise promise = worker->m_deferred.Promise();
+    worker->Queue();
+    
+    return promise;
 }

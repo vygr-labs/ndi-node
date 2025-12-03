@@ -22,6 +22,7 @@
 
 #include "ndi_sender.h"
 #include "ndi_utils.h"
+#include "ndi_async.h"
 #include <cstring>
 
 Napi::FunctionReference NdiSender::constructor;
@@ -32,11 +33,15 @@ Napi::Object NdiSender::Init(Napi::Env env, Napi::Object exports) {
     Napi::Function func = DefineClass(env, "NdiSender", {
         InstanceMethod("sendVideo", &NdiSender::SendVideo),
         InstanceMethod("sendVideoAsync", &NdiSender::SendVideoAsync),
+        InstanceMethod("sendVideoPromise", &NdiSender::SendVideoPromise),
         InstanceMethod("sendAudio", &NdiSender::SendAudio),
+        InstanceMethod("sendAudioPromise", &NdiSender::SendAudioPromise),
         InstanceMethod("sendMetadata", &NdiSender::SendMetadata),
         InstanceMethod("getTally", &NdiSender::GetTally),
+        InstanceMethod("getTallyAsync", &NdiSender::GetTallyAsync),
         InstanceMethod("setTally", &NdiSender::SetTally),
         InstanceMethod("getConnections", &NdiSender::GetConnections),
+        InstanceMethod("getConnectionsAsync", &NdiSender::GetConnectionsAsync),
         InstanceMethod("getSourceName", &NdiSender::GetSourceName),
         InstanceMethod("clearConnectionMetadata", &NdiSender::ClearConnectionMetadata),
         InstanceMethod("addConnectionMetadata", &NdiSender::AddConnectionMetadata),
@@ -349,4 +354,92 @@ Napi::Value NdiSender::Destroy(const Napi::CallbackInfo& info) {
 Napi::Value NdiSender::IsValid(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     return Napi::Boolean::New(env, m_sender != nullptr && !m_destroyed);
+}
+
+Napi::Value NdiSender::SendVideoPromise(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    if (!m_sender || m_destroyed) {
+        Napi::Error::New(env, "Sender has been destroyed").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    
+    if (info.Length() < 1 || !info[0].IsObject()) {
+        Napi::TypeError::New(env, "Expected video frame object").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    
+    Napi::Object frameObj = info[0].As<Napi::Object>();
+    uint8_t* dataBuffer = nullptr;
+    NDIlib_video_frame_v2_t frame = NdiUtils::ObjectToVideoFrame(env, frameObj, &dataBuffer);
+    
+    SendVideoWorker* worker = new SendVideoWorker(env, m_sender, frame, dataBuffer);
+    Napi::Promise promise = worker->m_deferred.Promise();
+    worker->Queue();
+    
+    return promise;
+}
+
+Napi::Value NdiSender::SendAudioPromise(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    if (!m_sender || m_destroyed) {
+        Napi::Error::New(env, "Sender has been destroyed").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    
+    if (info.Length() < 1 || !info[0].IsObject()) {
+        Napi::TypeError::New(env, "Expected audio frame object").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    
+    Napi::Object frameObj = info[0].As<Napi::Object>();
+    float* dataBuffer = nullptr;
+    NDIlib_audio_frame_v2_t frame = NdiUtils::ObjectToAudioFrame(env, frameObj, &dataBuffer);
+    
+    SendAudioWorker* worker = new SendAudioWorker(env, m_sender, frame, dataBuffer);
+    Napi::Promise promise = worker->m_deferred.Promise();
+    worker->Queue();
+    
+    return promise;
+}
+
+Napi::Value NdiSender::GetTallyAsync(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    if (!m_sender || m_destroyed) {
+        Napi::Error::New(env, "Sender has been destroyed").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    
+    uint32_t timeout = 0;
+    if (info.Length() > 0 && info[0].IsNumber()) {
+        timeout = info[0].As<Napi::Number>().Uint32Value();
+    }
+    
+    GetTallyWorker* worker = new GetTallyWorker(env, m_sender, timeout);
+    Napi::Promise promise = worker->m_deferred.Promise();
+    worker->Queue();
+    
+    return promise;
+}
+
+Napi::Value NdiSender::GetConnectionsAsync(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    
+    if (!m_sender || m_destroyed) {
+        Napi::Error::New(env, "Sender has been destroyed").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    
+    uint32_t timeout = 0;
+    if (info.Length() > 0 && info[0].IsNumber()) {
+        timeout = info[0].As<Napi::Number>().Uint32Value();
+    }
+    
+    GetConnectionsWorker* worker = new GetConnectionsWorker(env, m_sender, timeout);
+    Napi::Promise promise = worker->m_deferred.Promise();
+    worker->Queue();
+    
+    return promise;
 }

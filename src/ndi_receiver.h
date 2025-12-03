@@ -31,11 +31,15 @@ public:
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
     NdiReceiver(const Napi::CallbackInfo& info);
     ~NdiReceiver();
+    
+    // Allow async workers to access the receiver instance
+    NDIlib_recv_instance_t GetReceiver() const { return m_receiver; }
+    bool IsDestroyed() const { return m_destroyed; }
 
 private:
     static Napi::FunctionReference constructor;
     
-    // Instance methods
+    // Synchronous instance methods
     Napi::Value Connect(const Napi::CallbackInfo& info);
     Napi::Value Capture(const Napi::CallbackInfo& info);
     Napi::Value CaptureVideo(const Napi::CallbackInfo& info);
@@ -60,6 +64,11 @@ private:
     Napi::Value PtzExposureManual(const Napi::CallbackInfo& info);
     Napi::Value Destroy(const Napi::CallbackInfo& info);
     Napi::Value IsValid(const Napi::CallbackInfo& info);
+    
+    // Promise-based async instance methods
+    Napi::Value CaptureAsync(const Napi::CallbackInfo& info);
+    Napi::Value CaptureVideoAsync(const Napi::CallbackInfo& info);
+    Napi::Value CaptureAudioAsync(const Napi::CallbackInfo& info);
     
     // Internal state
     NDIlib_recv_instance_t m_receiver;
